@@ -3,10 +3,20 @@ import { MessageRequester } from "./types";
 
 const symbolRoute: unique symbol = Symbol();
 const symbolType: unique symbol = Symbol();
+const symbolData: unique symbol = Symbol();
+
+const reservedDataKeys = new Set([
+  "approveExternal",
+  "route",
+  "toJSON",
+  "type",
+  "validateBasic",
+]);
 
 export class SimpleMessage<R = any> extends Message<R> {
   protected [symbolRoute]: string;
   protected [symbolType]: string;
+  protected [symbolData]: Record<string, any>;
 
   [key: string]: any;
 
@@ -15,9 +25,24 @@ export class SimpleMessage<R = any> extends Message<R> {
 
     this[symbolRoute] = route;
     this[symbolType] = type;
+    this[symbolData] = Object.create(null);
 
     for (const key of Object.keys(data)) {
-      this[key] = data[key];
+      Object.defineProperty(this[symbolData], key, {
+        configurable: true,
+        enumerable: true,
+        value: data[key],
+        writable: true,
+      });
+
+      if (!reservedDataKeys.has(key)) {
+        Object.defineProperty(this, key, {
+          configurable: true,
+          enumerable: true,
+          value: data[key],
+          writable: true,
+        });
+      }
     }
   }
 
@@ -37,6 +62,20 @@ export class SimpleMessage<R = any> extends Message<R> {
   // approveExternal should be handled in background.
   override approveExternal(): boolean {
     return true;
+  }
+
+  toJSON(): Record<string, any> {
+    const message = { ...this[symbolData] };
+
+    if (Object.prototype.hasOwnProperty.call(this, "origin")) {
+      message["origin"] = this.origin;
+    }
+
+    if (this.routerMeta !== undefined) {
+      message["routerMeta"] = this.routerMeta;
+    }
+
+    return message;
   }
 }
 
